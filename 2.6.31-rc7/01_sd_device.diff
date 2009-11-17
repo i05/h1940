@@ -1,0 +1,18 @@
+commit 9385a55661a5f34acee0b5c6e83d129e62acd51f
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Aug 26 03:51:24 2009 +0400
+
+    binding for sd-card reader device
+
+diff --git a/arch/arm/mach-s3c2410/mach-h1940.c b/arch/arm/mach-s3c2410/mach-h1940.c
+index d9cd5dd..efd10d5 100644
+--- a/arch/arm/mach-s3c2410/mach-h1940.c
++++ b/arch/arm/mach-s3c2410/mach-h1940.c
+@@ -190,6 +190,7 @@ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_usbgadget,
+ 	&s3c_device_leds,
+ 	&s3c_device_bluetooth,
++	&s3c_device_sdi,
+ };
+ 
+ static void __init h1940_map_io(void)

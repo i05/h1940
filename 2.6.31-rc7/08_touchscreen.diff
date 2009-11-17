@@ -1,0 +1,573 @@
+commit f734de25a4217ebb751e0e94160dc87b5f3efa2e
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Sep 16 04:14:24 2009 +0400
+
+    s3c24xx touchscreen driver
+
+diff --git a/arch/arm/mach-s3c2410/mach-h1940.c b/arch/arm/mach-s3c2410/mach-h1940.c
+index 5b0dc92..371b6b6 100644
+--- a/arch/arm/mach-s3c2410/mach-h1940.c
++++ b/arch/arm/mach-s3c2410/mach-h1940.c
+@@ -46,6 +46,7 @@
+ #include <mach/fb.h>
+ #include <plat/udc.h>
+ #include <plat/iic.h>
++#include <plat/ts.h>
+ 
+ #include <plat/clock.h>
+ #include <plat/devs.h>
+@@ -304,6 +305,18 @@ static struct platform_device s3c_device_lcd_power = {
+ 	}
+ };
+ 
++static struct s3c_ts_mach_info h1940_ts_info = {
++	.count_shift = 4,
++};
++
++static struct platform_device s3c_device_ts = {
++	.name		= "s3c-ts",
++	.id		= -1,
++	.dev		= {
++		.platform_data	= &h1940_ts_info,
++	}
++};
++
+ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_usb,
+ 	&s3c_device_lcd,
+@@ -318,6 +331,8 @@ static struct platform_device *h1940_devices[] __initdata = {
+  	&s3c_device_timer[0],
+  	&s3c_device_bl,
+  	&s3c_device_lcd_power,
++	&s3c_device_adc,
++	&s3c_device_ts,
+ };
+ 
+ static void __init h1940_map_io(void)
+diff --git a/arch/arm/plat-s3c/include/plat/adc.h b/arch/arm/plat-s3c/include/plat/adc.h
+index 5f3b1cd..082706b 100644
+--- a/arch/arm/plat-s3c/include/plat/adc.h
++++ b/arch/arm/plat-s3c/include/plat/adc.h
+@@ -28,6 +28,8 @@ extern struct s3c_adc_client *
+ 			 void (*conv)(struct s3c_adc_client *client,
+ 				      unsigned d0, unsigned d1,
+ 				      unsigned *samples_left),
++			 void (*touch)(struct s3c_adc_client *client,
++				       unsigned on),
+ 			 unsigned int is_ts);
+ 
+ extern void s3c_adc_release(struct s3c_adc_client *client);
+diff --git a/arch/arm/plat-s3c24xx/adc.c b/arch/arm/plat-s3c24xx/adc.c
+index 11117a7..91d1fce 100644
+--- a/arch/arm/plat-s3c24xx/adc.c
++++ b/arch/arm/plat-s3c24xx/adc.c
+@@ -23,6 +23,8 @@
+ #include <plat/regs-adc.h>
+ #include <plat/adc.h>
+ 
++#include <mach/regs-irq.h>
++
+ /* This driver is designed to control the usage of the ADC block between
+  * the touchscreen and any other drivers that may need to use it, such as
+  * the hwmon driver.
+@@ -50,6 +52,7 @@ struct s3c_adc_client {
+ 	void	(*convert_cb)(struct s3c_adc_client *c,
+ 			      unsigned val1, unsigned val2,
+ 			      unsigned *samples_left);
++	void	(*touch_cb)(struct s3c_adc_client *c, unsigned on);
+ };
+ 
+ struct adc_device {
+@@ -58,11 +61,16 @@ struct adc_device {
+ 	struct clk		*clk;
+ 	struct s3c_adc_client	*cur;
+ 	struct s3c_adc_client	*ts_pend;
++	struct s3c_adc_client	*ts;
+ 	void __iomem		*regs;
+ 
+ 	unsigned int		 prescale;
+ 
+ 	int			 irq;
++	int			 irq_tc;
++
++	int			 is_waiting_tc;
++	u32			 dly, tsc;
+ };
+ 
+ static struct adc_device *adc_dev;
+@@ -79,9 +87,25 @@ static inline void s3c_adc_convert(struct adc_device *adc)
+ 	writel(con, adc->regs + S3C2410_ADCCON);
+ }
+ 
++static inline void s3c_adc_wait_tc(struct adc_device *adc)
++{
++	unsigned tsc = readl(adc->regs + S3C2410_ADCTSC);
++	tsc |= S3C2410_ADCTSC_XY_PST(3);
++	tsc &= ~S3C2410_ADCTSC_AUTO_PST;
++	writel(tsc, adc->regs + S3C2410_ADCTSC);
++}
++
++static inline void s3c_adc_disable_tc(struct adc_device *adc)
++{
++	unsigned tsc = readl(adc->regs + S3C2410_ADCTSC);
++	tsc &= ~S3C2410_ADCTSC_XY_PST(3);
++	writel(tsc, adc->regs + S3C2410_ADCTSC);
++}
++
+ static inline void s3c_adc_select(struct adc_device *adc,
+ 				  struct s3c_adc_client *client)
+ {
++	unsigned tsc;
+ 	unsigned con = readl(adc->regs + S3C2410_ADCCON);
+ 
+ 	client->select_cb(client, 1);
+@@ -94,6 +118,15 @@ static inline void s3c_adc_select(struct adc_device *adc,
+ 		con |= S3C2410_ADCCON_SELMUX(client->channel);
+ 
+ 	writel(con, adc->regs + S3C2410_ADCCON);
++
++	tsc = readl(adc->regs + S3C2410_ADCTSC);
++
++	if(client->is_ts)
++		tsc |= S3C2410_ADCTSC_AUTO_PST;
++	else
++		tsc &= ~S3C2410_ADCTSC_AUTO_PST;
++
++	writel(tsc, adc->regs + S3C2410_ADCTSC);
+ }
+ 
+ static void s3c_adc_dbgshow(struct adc_device *adc)
+@@ -104,6 +137,24 @@ static void s3c_adc_dbgshow(struct adc_device *adc)
+ 		readl(adc->regs + S3C2410_ADCDLY));
+ }
+ 
++static void s3c_adc_check_touch(struct adc_device *adc)
++{
++	struct s3c_adc_client *client = adc->ts;
++	unsigned data0, data1;
++
++	if (!client) {
++		dev_warn(&adc->pdev->dev, "%s: no ts client registered\n", __func__);
++		return;
++	}
++
++	data0 = readl(adc->regs + S3C2410_ADCDAT0);
++	data1 = readl(adc->regs + S3C2410_ADCDAT1);
++
++	if ((data0 & S3C2410_ADCDAT0_UPDOWN) || (data1 & S3C2410_ADCDAT1_UPDOWN)) {
++		(client->touch_cb)(client, 0);
++	}
++}
++
+ static void s3c_adc_try(struct adc_device *adc)
+ {
+ 	struct s3c_adc_client *next = adc->ts_pend;
+@@ -116,12 +167,21 @@ static void s3c_adc_try(struct adc_device *adc)
+ 		adc->ts_pend = NULL;
+ 
+ 	if (next) {
++		if (adc->is_waiting_tc) {
++			s3c_adc_check_touch(adc);
++			adc->is_waiting_tc = 0;
++		}
+ 		adc_dbg(adc, "new client is %p\n", next);
+ 		adc->cur = next;
+ 		s3c_adc_select(adc, next);
+ 		s3c_adc_convert(adc);
+-		s3c_adc_dbgshow(adc);
+ 	}
++	else if(adc->ts) {
++		s3c_adc_wait_tc(adc);
++		adc->is_waiting_tc = 1;
++	}
++
++	s3c_adc_dbgshow(adc);
+ }
+ 
+ int s3c_adc_start(struct s3c_adc_client *client,
+@@ -143,8 +203,10 @@ int s3c_adc_start(struct s3c_adc_client *client,
+ 	client->channel = channel;
+ 	client->nr_samples = nr_samples;
+ 
+-	if (client->is_ts)
++	if (client->is_ts) {
+ 		adc->ts_pend = client;
++		adc->ts = client;
++	}
+ 	else
+ 		list_add_tail(&client->pend, &adc_pending);
+ 
+@@ -195,12 +257,19 @@ static void s3c_adc_default_select(struct s3c_adc_client *client,
+ {
+ }
+ 
++static void s3c_adc_default_touch(struct s3c_adc_client *client,
++				  unsigned int on)
++{
++}
++
+ struct s3c_adc_client *s3c_adc_register(struct platform_device *pdev,
+ 					void (*select)(struct s3c_adc_client *client,
+ 						       unsigned int selected),
+ 					void (*conv)(struct s3c_adc_client *client,
+ 						     unsigned d0, unsigned d1,
+ 						     unsigned *samples_left),
++					void (*touch)(struct s3c_adc_client *client,
++						      unsigned int on),
+ 					unsigned int is_ts)
+ {
+ 	struct s3c_adc_client *client;
+@@ -209,6 +278,8 @@ struct s3c_adc_client *s3c_adc_register(struct platform_device *pdev,
+ 
+ 	if (!select)
+ 		select = s3c_adc_default_select;
++	if (!touch)
++		touch = s3c_adc_default_touch;
+ 
+ 	if (!pdev)
+ 		return ERR_PTR(-EINVAL);
+@@ -223,6 +294,7 @@ struct s3c_adc_client *s3c_adc_register(struct platform_device *pdev,
+ 	client->is_ts = is_ts;
+ 	client->select_cb = select;
+ 	client->convert_cb = conv;
++	client->touch_cb = touch;
+ 
+ 	return client;
+ }
+@@ -233,6 +305,8 @@ void s3c_adc_release(struct s3c_adc_client *client)
+ 	/* We should really check that nothing is in progress. */
+ 	if (adc_dev->cur == client)
+ 		adc_dev->cur = NULL;
++	if (adc_dev->ts == client)
++		adc_dev->ts = NULL;
+ 	if (adc_dev->ts_pend == client)
+ 		adc_dev->ts_pend = NULL;
+ 	else {
+@@ -283,7 +357,6 @@ static irqreturn_t s3c_adc_irq(int irq, void *pw)
+ 		local_irq_save(flags);
+ 		(client->select_cb)(client, 0);
+ 		adc->cur = NULL;
+-
+ 		s3c_adc_try(adc);
+ 		local_irq_restore(flags);
+ 	}
+@@ -291,6 +364,25 @@ static irqreturn_t s3c_adc_irq(int irq, void *pw)
+ 	return IRQ_HANDLED;
+ }
+ 
++static irqreturn_t s3c_adc_irq_tc(int irq, void *pw)
++{
++	struct adc_device *adc = pw;
++	struct s3c_adc_client *client = adc->ts;
++	unsigned long flags;
++
++	if (!client) {
++		dev_warn(&adc->pdev->dev, "%s: no ts adc pending\n", __func__);
++		return IRQ_HANDLED;
++	}
++
++	local_irq_save(flags);
++	s3c_adc_disable_tc(adc);
++	(client->touch_cb)(client, 1);
++	local_irq_restore(flags);
++
++	return IRQ_HANDLED;
++}
++
+ static int s3c_adc_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+@@ -309,22 +401,35 @@ static int s3c_adc_probe(struct platform_device *pdev)
+ 
+ 	adc->irq = platform_get_irq(pdev, 1);
+ 	if (adc->irq <= 0) {
+-		dev_err(dev, "failed to get adc irq\n");
++		dev_err(dev, "failed to get IRQ_ADC\n");
+ 		ret = -ENOENT;
+ 		goto err_alloc;
+ 	}
+ 
+ 	ret = request_irq(adc->irq, s3c_adc_irq, 0, dev_name(dev), adc);
+ 	if (ret < 0) {
+-		dev_err(dev, "failed to attach adc irq\n");
++		dev_err(dev, "failed to attach IRQ_ADC\n");
+ 		goto err_alloc;
+ 	}
+ 
++	adc->irq_tc = platform_get_irq(pdev, 0);
++	if (adc->irq <= 0) {
++		dev_err(dev, "failed to get IRQ_TC\n");
++		ret = -ENOENT;
++		goto err_irq_adc;
++	}
++
++	ret = request_irq(adc->irq_tc, s3c_adc_irq_tc, 0, dev_name(dev), adc);
++	if (ret < 0) {
++		dev_err(dev, "failed to attach IRQ_TC\n");
++		goto err_irq_adc;
++	}
++
+ 	adc->clk = clk_get(dev, "adc");
+ 	if (IS_ERR(adc->clk)) {
+ 		dev_err(dev, "failed to get adc clock\n");
+ 		ret = PTR_ERR(adc->clk);
+-		goto err_irq;
++		goto err_irq_tc;
+ 	}
+ 
+ 	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+@@ -356,7 +461,10 @@ static int s3c_adc_probe(struct platform_device *pdev)
+  err_clk:
+ 	clk_put(adc->clk);
+ 
+- err_irq:
++ err_irq_tc:
++	free_irq(adc->irq_tc, adc);
++
++ err_irq_adc:
+ 	free_irq(adc->irq, adc);
+ 
+  err_alloc:
+@@ -387,6 +495,9 @@ static int s3c_adc_suspend(struct platform_device *pdev, pm_message_t state)
+ 	con |= S3C2410_ADCCON_STDBM;
+ 	writel(con, adc->regs + S3C2410_ADCCON);
+ 
++	adc->tsc = readl(adc->regs + S3C2410_ADCTSC);
++	adc->dly = readl(adc->regs + S3C2410_ADCDLY);
++
+ 	clk_disable(adc->clk);
+ 
+ 	return 0;
+@@ -395,12 +506,20 @@ static int s3c_adc_suspend(struct platform_device *pdev, pm_message_t state)
+ static int s3c_adc_resume(struct platform_device *pdev)
+ {
+ 	struct adc_device *adc = platform_get_drvdata(pdev);
++	unsigned int intmsk, submsk;
+ 
+ 	clk_enable(adc->clk);
+ 
+ 	writel(adc->prescale | S3C2410_ADCCON_PRSCEN,
+ 	       adc->regs + S3C2410_ADCCON);
+ 
++	writel(adc->tsc, adc->regs + S3C2410_ADCTSC);
++	writel(adc->dly, adc->regs + S3C2410_ADCDLY);
++
++	if(adc->ts && adc->is_waiting_tc)
++		s3c_adc_wait_tc(adc);
++
++	s3c_adc_dbgshow(adc);
+ 	return 0;
+ }
+ 
+diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
+index 72e2712..0c5201b 100644
+--- a/drivers/input/touchscreen/Kconfig
++++ b/drivers/input/touchscreen/Kconfig
+@@ -260,6 +260,12 @@ config TOUCHSCREEN_MIGOR
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called migor_ts.
+ 
++config TOUCHSCREEN_S3C
++	tristate "S3C SoC touchscreen"
++	depends on S3C24XX_ADC
++	help
++	  Say Y here to enable s3c24xx touchscreen support.
++
+ config TOUCHSCREEN_TOUCHRIGHT
+ 	tristate "Touchright serial touchscreen"
+ 	select SERIO
+diff --git a/drivers/input/touchscreen/Makefile b/drivers/input/touchscreen/Makefile
+index 3e1c5e0..905aa7e 100644
+--- a/drivers/input/touchscreen/Makefile
++++ b/drivers/input/touchscreen/Makefile
+@@ -25,6 +25,7 @@ obj-$(CONFIG_TOUCHSCREEN_HP7XX)		+= jornada720_ts.o
+ obj-$(CONFIG_TOUCHSCREEN_HTCPEN)	+= htcpen.o
+ obj-$(CONFIG_TOUCHSCREEN_USB_COMPOSITE)	+= usbtouchscreen.o
+ obj-$(CONFIG_TOUCHSCREEN_PENMOUNT)	+= penmount.o
++obj-$(CONFIG_TOUCHSCREEN_S3C)		+= s3c-ts.o
+ obj-$(CONFIG_TOUCHSCREEN_TOUCHIT213)	+= touchit213.o
+ obj-$(CONFIG_TOUCHSCREEN_TOUCHRIGHT)	+= touchright.o
+ obj-$(CONFIG_TOUCHSCREEN_TOUCHWIN)	+= touchwin.o
+diff --git a/drivers/input/touchscreen/s3c-ts.c b/drivers/input/touchscreen/s3c-ts.c
+new file mode 100644
+index 0000000..0af5035
+--- /dev/null
++++ b/drivers/input/touchscreen/s3c-ts.c
+@@ -0,0 +1,177 @@
++/* s3c24xx touchscreen */
++#include <linux/init.h>
++#include <linux/module.h>
++#include <linux/device.h>
++#include <linux/platform_device.h>
++#include <linux/err.h>
++#include <linux/timer.h>
++#include <linux/slab.h>
++#include <linux/input.h>
++
++#include <plat/adc.h>
++#include <plat/ts.h>
++
++struct s3c_ts {
++	struct timer_list timer;
++	struct s3c_adc_client *client;
++	struct input_dev *idev;
++	unsigned avg_count;
++	unsigned avg_shift;
++
++	unsigned on;
++	unsigned x, y;
++	unsigned count;
++};
++
++static struct s3c_ts *ts = NULL;
++
++static void do_tick(unsigned long data) {
++	int res;
++	res = s3c_adc_start(ts->client, 0, 1);
++}
++
++static void ts_adc_conv(struct s3c_adc_client *client, unsigned d0, unsigned d1, unsigned *left) {
++	struct input_dev *idev = ts->idev;
++
++	if(ts->on) {
++		ts->x += d0;
++		ts->y += d1;
++		ts->count++;
++
++		if(ts->count == ts->avg_count) {
++			input_report_abs(idev, ABS_PRESSURE, 1);
++			input_report_key(idev, BTN_TOUCH, 1);
++			input_report_abs(idev, ABS_X, ts->x >> ts->avg_shift);
++			input_report_abs(idev, ABS_Y, ts->y >> ts->avg_shift);
++			input_sync(idev);
++
++			ts->x = 0;
++			ts->y = 0;
++			ts->count = 0;
++		}
++		mod_timer(&ts->timer, jiffies + HZ/100);
++	}
++	else {
++		input_report_abs(idev, ABS_PRESSURE, 0);
++		input_report_key(idev, BTN_TOUCH, 0);
++		input_sync(idev);
++		ts->count = 0;
++		ts->x = 0;
++		ts->y = 0;
++	}
++
++}
++
++static void ts_adc_touch(struct s3c_adc_client *client, unsigned on) {
++	ts->on = on;
++	if(on) do_tick(0);
++}
++
++static struct s3c_ts_mach_info __devinitdata default_mach = {
++	.count_shift = 0,
++};
++
++static int __devinit s3c_ts_probe(struct platform_device *pdev) {
++	int res = -ENOMEM;
++	struct input_dev *idev;
++	struct s3c_ts_mach_info *ts_mach;
++
++	dev_info(&pdev->dev, "s3c24xx touchscreen driver\n");
++
++	if(ts) 
++		return -EBUSY;
++
++	ts = kzalloc(sizeof(struct s3c_ts), GFP_KERNEL);
++	if(!ts) 
++		return res;
++
++	ts_mach = pdev->dev.platform_data;
++	if(!ts_mach)
++		ts_mach = &default_mach;
++
++	ts->avg_shift = ts_mach->count_shift;
++	ts->avg_count = (1 << ts_mach->count_shift);
++
++	dev_info(&pdev->dev, "sampling averaged of %d (shift %d)\n",
++		 ts->avg_count, ts->avg_shift);
++
++	platform_set_drvdata(pdev, ts);
++
++	idev = input_allocate_device();
++	if(!idev)
++		goto free1;
++	ts->idev = idev;
++
++	init_timer(&ts->timer);
++	ts->timer.function = do_tick;
++	ts->timer.data = (unsigned long)ts;
++
++	ts->client = s3c_adc_register(pdev, NULL, ts_adc_conv, ts_adc_touch, 1);
++	if(IS_ERR(ts->client)) {
++		res = PTR_ERR(ts->client);
++		goto free2;
++	}
++
++	idev->name = "s3c touchscreen";
++	idev->id.bustype = BUS_HOST;
++	idev->id.vendor = 0xABCD;
++	idev->id.product = 0x0001;
++	idev->id.version = 0x0001;
++	idev->dev.parent = &pdev->dev;
++
++	idev->evbit[0] = BIT(EV_KEY) | BIT(EV_ABS);
++	idev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
++	input_set_abs_params(idev, ABS_X, 0, 0x3ff, 0, 0);
++	input_set_abs_params(idev, ABS_Y, 0, 0x3ff, 0, 0);
++	input_set_abs_params(idev, ABS_PRESSURE, 0, 1, 0, 0);
++
++	res = input_register_device(idev);
++	if (res)
++		goto free3;
++
++	do_tick(0);
++
++	return 0;
++free3:
++	s3c_adc_release(ts->client);
++free2:
++	input_free_device(ts->idev);
++free1:
++	kfree(ts);
++	return res;
++}
++
++static int __devexit s3c_ts_remove(struct platform_device *pdev) {
++	del_timer(&ts->timer);
++	input_free_device(ts->idev);
++	s3c_adc_release(ts->client);
++	kfree(ts);
++	return 0;
++}
++
++#define s3c_ts_suspend NULL
++#define s3c_ts_resume NULL
++
++static struct platform_driver s3c_ts_plat = {
++	.probe = s3c_ts_probe,
++	.remove = __devexit_p(s3c_ts_remove),
++	.suspend = s3c_ts_suspend,
++	.resume = s3c_ts_resume,
++	.driver = {
++		.name = "s3c-ts",
++		.owner = THIS_MODULE,
++	},
++};
++
++static int __init s3c_ts_init(void) {
++	return platform_driver_register(&s3c_ts_plat);
++}
++
++static void __exit s3c_ts_exit(void) {
++	platform_driver_unregister(&s3c_ts_plat);
++}
++
++module_init(s3c_ts_init);
++module_exit(s3c_ts_exit);
++
++MODULE_LICENSE("GPL");

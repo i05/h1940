@@ -1,0 +1,50 @@
+commit fc27e4403082567367704e4dd3f8f6af59f2929a
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Aug 26 03:55:29 2009 +0400
+
+    pwm-backlight device
+
+diff --git a/arch/arm/mach-s3c2410/mach-h1940.c b/arch/arm/mach-s3c2410/mach-h1940.c
+index 6eb63ba..645e18d 100644
+--- a/arch/arm/mach-s3c2410/mach-h1940.c
++++ b/arch/arm/mach-s3c2410/mach-h1940.c
+@@ -23,6 +23,8 @@
+ #include <linux/io.h>
+ #include <linux/input.h>
+ #include <linux/gpio_keys.h>
++#include <linux/pwm.h>
++#include <linux/pwm_backlight.h>
+ 
+ #include <asm/mach/arch.h>
+ #include <asm/mach/map.h>
+@@ -268,6 +270,21 @@ static struct platform_device s3c_device_buttons = {
+ 	}
+ };
+ 
++static struct platform_pwm_backlight_data h1940_bl_cfg = {
++	.pwm_id		= 0,
++	.pwm_period_ns	= 15000,	/* 66 kHz */
++	.max_brightness	= 10,
++	.dft_brightness = 5,
++};
++
++static struct platform_device s3c_device_bl = {
++	.name		= "pwm-backlight",
++	.id		= -1,
++	.dev		= {
++		.platform_data = &h1940_bl_cfg,
++	},
++};
++
+ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_usb,
+ 	&s3c_device_lcd,
+@@ -279,6 +296,8 @@ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_bluetooth,
+ 	&s3c_device_sdi,
+ 	&s3c_device_buttons,
++ 	&s3c_device_timer[0],
++ 	&s3c_device_bl,
+ };
+ 
+ static void __init h1940_map_io(void)

@@ -1,0 +1,119 @@
+commit f14ff3aa904252b69d7bdf557ab3dc0ac5073441
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Aug 26 03:54:35 2009 +0400
+
+    gpio-keys driven keyboard
+
+diff --git a/arch/arm/mach-s3c2410/mach-h1940.c b/arch/arm/mach-s3c2410/mach-h1940.c
+index cbdd45a..6eb63ba 100644
+--- a/arch/arm/mach-s3c2410/mach-h1940.c
++++ b/arch/arm/mach-s3c2410/mach-h1940.c
+@@ -21,6 +21,8 @@
+ #include <linux/serial_core.h>
+ #include <linux/platform_device.h>
+ #include <linux/io.h>
++#include <linux/input.h>
++#include <linux/gpio_keys.h>
+ 
+ #include <asm/mach/arch.h>
+ #include <asm/mach/map.h>
+@@ -181,6 +183,91 @@ static struct platform_device s3c_device_bluetooth = {
+ 	.id               = -1,
+ };
+ 
++static struct gpio_keys_button h1940_buttons[] = {
++	{
++		.gpio		= S3C2410_GPF(0),
++		.code		= KEY_POWER,
++		.desc		= "Power",
++		.active_low	= 1,
++		.wakeup		= 1,
++	},
++	{
++		.gpio		= S3C2410_GPF(6),
++		.code		= KEY_ENTER,
++		.desc		= "Select",
++		.active_low	= 1,
++		.wakeup		= 1,
++	},
++	{
++		.gpio		= S3C2410_GPF(7),
++		.code		= KEY_RO,
++		.desc		= "Record",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(0),
++		.code		= KEY_F9,
++		.desc		= "Calendar",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(2),
++		.code		= KEY_F10,
++		.desc		= "Contacts",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(3),
++		.code		= KEY_F11,
++		.desc		= "Mail",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(6),
++		.code		= KEY_LEFT,
++		.desc		= "Left",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(7),
++		.code		= KEY_F12,
++		.desc		= "Home",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(8),
++		.code		= KEY_RIGHT,
++		.desc		= "Right",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(9),
++		.code		= KEY_UP,
++		.desc		= "Up",
++		.active_low	= 1,
++	},
++	{
++		.gpio		= S3C2410_GPG(10),
++		.code		= KEY_DOWN,
++		.desc		= "Down",
++		.active_low	= 1,
++	},
++};
++
++static struct gpio_keys_platform_data h1940_button_data = {
++	.buttons	= h1940_buttons,
++	.nbuttons	= ARRAY_SIZE(h1940_buttons),
++};
++
++static struct platform_device s3c_device_buttons = {
++	.name		= "gpio-keys",
++	.id		= -1,
++	.num_resources	= 0,
++	.dev		= {
++		.platform_data	= &h1940_button_data,
++	}
++};
++
+ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_usb,
+ 	&s3c_device_lcd,
+@@ -191,6 +278,7 @@ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_leds,
+ 	&s3c_device_bluetooth,
+ 	&s3c_device_sdi,
++	&s3c_device_buttons,
+ };
+ 
+ static void __init h1940_map_io(void)

@@ -1,0 +1,58 @@
+commit 7f5c55224a6f53337ffe91cb50f08a9f115d772d
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Sep 2 04:07:40 2009 +0400
+
+    LCD power management stuff
+
+diff --git a/arch/arm/mach-s3c2410/mach-h1940.c b/arch/arm/mach-s3c2410/mach-h1940.c
+index 645e18d..5b0dc92 100644
+--- a/arch/arm/mach-s3c2410/mach-h1940.c
++++ b/arch/arm/mach-s3c2410/mach-h1940.c
+@@ -25,6 +25,7 @@
+ #include <linux/gpio_keys.h>
+ #include <linux/pwm.h>
+ #include <linux/pwm_backlight.h>
++#include <video/platform_lcd.h>
+ 
+ #include <asm/mach/arch.h>
+ #include <asm/mach/map.h>
+@@ -41,6 +42,7 @@
+ 
+ #include <mach/h1940.h>
+ #include <mach/h1940-latch.h>
++#include <mach/gpio.h>
+ #include <mach/fb.h>
+ #include <plat/udc.h>
+ #include <plat/iic.h>
+@@ -285,6 +287,23 @@ static struct platform_device s3c_device_bl = {
+ 	},
+ };
+ 
++static void h1940_lcd_set_power(struct plat_lcd_data *pdata, unsigned int power) {
++	gpio_set_value(S3C2410_GPC(5), !!power);
++}
++
++struct plat_lcd_data h1940_lcd_power_data = {
++	.set_power	= h1940_lcd_set_power,
++};
++
++static struct platform_device s3c_device_lcd_power = {
++	.name		= "platform-lcd",
++	.id		= -1,
++	.num_resources	= 0,
++	.dev		= {
++		.platform_data	= &h1940_lcd_power_data,
++	}
++};
++
+ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_usb,
+ 	&s3c_device_lcd,
+@@ -298,6 +317,7 @@ static struct platform_device *h1940_devices[] __initdata = {
+ 	&s3c_device_buttons,
+  	&s3c_device_timer[0],
+  	&s3c_device_bl,
++ 	&s3c_device_lcd_power,
+ };
+ 
+ static void __init h1940_map_io(void)

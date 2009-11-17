@@ -1,0 +1,44 @@
+commit 82434b8c98834a5aae5b7bf08134e4947ad367c2
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Aug 26 03:56:18 2009 +0400
+
+    aving all PWM registers to avoid troubles on resume
+
+diff --git a/arch/arm/plat-s3c24xx/pm.c b/arch/arm/plat-s3c24xx/pm.c
+index 56e5253..830b033 100644
+--- a/arch/arm/plat-s3c24xx/pm.c
++++ b/arch/arm/plat-s3c24xx/pm.c
+@@ -36,6 +36,7 @@
+ #include <linux/io.h>
+ 
+ #include <plat/regs-serial.h>
++#include <plat/regs-timer.h>
+ #include <mach/regs-clock.h>
+ #include <mach/regs-gpio.h>
+ #include <mach/regs-mem.h>
+@@ -74,6 +75,25 @@ static struct sleep_save core_save[] = {
+ #endif
+ 	SAVE_ITEM(S3C2410_UPLLCON),
+ 	SAVE_ITEM(S3C2410_CLKSLOW),
++
++	SAVE_ITEM(S3C2410_TCFG0),
++	SAVE_ITEM(S3C2410_TCFG1),
++	SAVE_ITEM(S3C2410_TCON),
++	SAVE_ITEM(S3C2410_TCNTB(0)),
++	SAVE_ITEM(S3C2410_TCMPB(0)),
++	SAVE_ITEM(S3C2410_TCNTO(0)),
++	SAVE_ITEM(S3C2410_TCNTB(1)),
++	SAVE_ITEM(S3C2410_TCMPB(1)),
++	SAVE_ITEM(S3C2410_TCNTO(1)),
++	SAVE_ITEM(S3C2410_TCNTB(2)),
++	SAVE_ITEM(S3C2410_TCMPB(2)),
++	SAVE_ITEM(S3C2410_TCNTO(2)),
++	SAVE_ITEM(S3C2410_TCNTB(3)),
++	SAVE_ITEM(S3C2410_TCMPB(3)),
++	SAVE_ITEM(S3C2410_TCNTO(3)),
++	SAVE_ITEM(S3C2410_TCNTB(4)),
++	SAVE_ITEM(S3C2410_TCMPB(4)),
++	SAVE_ITEM(S3C2410_TCNTO(4)),
+ };
+ 
+ static struct sleep_save misc_save[] = {

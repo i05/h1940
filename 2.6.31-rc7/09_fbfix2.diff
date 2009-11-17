@@ -1,0 +1,40 @@
+commit e121a3431b52054bf9d3835c3ed6110d0b7ca1e3
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Sep 16 04:16:04 2009 +0400
+
+    S3C24XX: fix s3c24xx_fb_set_platdata() to make complete structure copy
+
+diff --git a/arch/arm/plat-s3c24xx/devs.c b/arch/arm/plat-s3c24xx/devs.c
+index 4eb378c..a4056f7 100644
+--- a/arch/arm/plat-s3c24xx/devs.c
++++ b/arch/arm/plat-s3c24xx/devs.c
+@@ -170,14 +170,26 @@ EXPORT_SYMBOL(s3c_device_lcd);
+ void __init s3c24xx_fb_set_platdata(struct s3c2410fb_mach_info *pd)
+ {
+ 	struct s3c2410fb_mach_info *npd;
++	struct s3c2410fb_display *ndsp;
+ 
+ 	npd = kmalloc(sizeof(*npd), GFP_KERNEL);
+ 	if (npd) {
+ 		memcpy(npd, pd, sizeof(*npd));
+-		s3c_device_lcd.dev.platform_data = npd;
+-	} else {
+-		printk(KERN_ERR "no memory for LCD platform data\n");
++
++		ndsp = kmalloc(npd->num_displays * sizeof(*ndsp), GFP_KERNEL);
++		if (ndsp) {
++			memcpy(ndsp, pd->displays,  npd->num_displays *
++					sizeof(*ndsp));
++			npd->displays = ndsp;
++			s3c_device_lcd.dev.platform_data = npd;
++		} else {
++			kfree(npd);
++		}
+ 	}
++
++	if (!npd || !ndsp)
++		printk(KERN_ERR "no memory for LCD platform data\n");
++
+ }
+ 
+ /* NAND Controller */

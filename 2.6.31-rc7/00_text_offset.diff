@@ -1,0 +1,118 @@
+commit 13354564663ff28877503598f5139fb2d49a1421
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Aug 26 03:50:59 2009 +0400
+
+    text offset parameter
+
+diff --git a/arch/arm/Kconfig b/arch/arm/Kconfig
+index aef63c8..48b00f9 100644
+--- a/arch/arm/Kconfig
++++ b/arch/arm/Kconfig
+@@ -872,12 +872,28 @@ source "drivers/pci/Kconfig"
+ 
+ source "drivers/pcmcia/Kconfig"
+ 
++
++
+ endmenu
+ 
+ menu "Kernel Features"
+ 
+ source "kernel/time/Kconfig"
+ 
++config TXTOFFSET_DELTA
++	bool "Move kernel text offset"
++	default n
++
++config TXTOFFSET_DELTA_VALUE
++	hex "Kernel text offset delta value"
++	depends on TXTOFFSET_DELTA
++	default "0x00000000"
++	help
++	  This delta value moves the default base of the kernel
++	  text segment from the architecture default. This can be
++	  useful for machines where the bootloader uses the area
++	  the kernel usually occupies for suspend/resume.
++	
+ config SMP
+ 	bool "Symmetric Multi-Processing (EXPERIMENTAL)"
+ 	depends on EXPERIMENTAL && (REALVIEW_EB_ARM11MP || REALVIEW_EB_A9MP ||\
+diff --git a/arch/arm/Makefile b/arch/arm/Makefile
+index c877d6d..c0e1423 100644
+--- a/arch/arm/Makefile
++++ b/arch/arm/Makefile
+@@ -14,7 +14,7 @@ LDFLAGS_vmlinux	:=-p --no-undefined -X
+ ifeq ($(CONFIG_CPU_ENDIAN_BE8),y)
+ LDFLAGS_vmlinux	+= --be8
+ endif
+-CPPFLAGS_vmlinux.lds = -DTEXT_OFFSET=$(TEXT_OFFSET)
++CPPFLAGS_vmlinux.lds = -DTEXT_OFFSET="$(TEXT_OFFSET)"
+ OBJCOPYFLAGS	:=-O binary -R .note -R .note.gnu.build-id -R .comment -S
+ GZFLAGS		:=-9
+ #KBUILD_CFLAGS	+=-pipe
+@@ -178,7 +178,12 @@ export CFLAGS_3c589_cs.o
+ endif
+ 
+ # The byte offset of the kernel image in RAM from the start of RAM.
++
++ifeq ($(CONFIG_TXTOFFSET_DELTA),y)
++TEXT_OFFSET := $(textofs-y) + $(CONFIG_TXTOFFSET_DELTA_VALUE)
++else
+ TEXT_OFFSET := $(textofs-y)
++endif
+ 
+ # The first directory contains additional information for the boot setup code
+ ifneq ($(machine-y),)
+diff --git a/arch/arm/boot/Makefile b/arch/arm/boot/Makefile
+index da226ab..9a18891 100644
+--- a/arch/arm/boot/Makefile
++++ b/arch/arm/boot/Makefile
+@@ -21,10 +21,22 @@ endif
+ #   ZRELADDR == virt_to_phys(PAGE_OFFSET + TEXT_OFFSET)
+ #   PARAMS_PHYS must be within 4MB of ZRELADDR
+ #   INITRD_PHYS must be in RAM
++# note, we use ZRELADDR_c because mkuimage needs single hex value
++
++ifeq ($(CONFIG_TXTOFFSET_DELTA),y)
++ZRELADDR    := $(zreladdr-y)+$(CONFIG_TXTOFFSET_DELTA_VALUE)
++ZRELADDR_h  := $(subst 0x,,$(ZRELADDR))
++ZRELADDR_c  := 0x$(shell echo "ibase=16; obase=10; $(ZRELADDR_h)" | bc -l)
++else
+ ZRELADDR    := $(zreladdr-y)
++ZRELADDR_c  := $(zreladdr-y)
++endif
++
+ PARAMS_PHYS := $(params_phys-y)
+ INITRD_PHYS := $(initrd_phys-y)
+ 
++
++
+ export ZRELADDR INITRD_PHYS PARAMS_PHYS
+ 
+ targets := Image zImage xipImage bootpImage uImage
+diff --git a/arch/arm/boot/compressed/Makefile b/arch/arm/boot/compressed/Makefile
+index ce39dc5..ebf436a 100644
+--- a/arch/arm/boot/compressed/Makefile
++++ b/arch/arm/boot/compressed/Makefile
+@@ -77,7 +77,7 @@ EXTRA_AFLAGS  := -Wa,-march=all
+ # Supply ZRELADDR, INITRD_PHYS and PARAMS_PHYS to the decompressor via
+ # linker symbols.  We only define initrd_phys and params_phys if the
+ # machine class defined the corresponding makefile variable.
+-LDFLAGS_vmlinux := --defsym zreladdr=$(ZRELADDR)
++LDFLAGS_vmlinux := --defsym zreladdr="$(ZRELADDR)"
+ ifeq ($(CONFIG_CPU_ENDIAN_BE8),y)
+ LDFLAGS_vmlinux += --be8
+ endif
+diff --git a/arch/arm/kernel/Makefile b/arch/arm/kernel/Makefile
+index ff89d0b..b045252 100644
+--- a/arch/arm/kernel/Makefile
++++ b/arch/arm/kernel/Makefile
+@@ -2,7 +2,7 @@
+ # Makefile for the linux kernel.
+ #
+ 
+-AFLAGS_head.o := -DTEXT_OFFSET=$(TEXT_OFFSET)
++AFLAGS_head.o := -DTEXT_OFFSET="$(TEXT_OFFSET)"
+ 
+ ifdef CONFIG_DYNAMIC_FTRACE
+ CFLAGS_REMOVE_ftrace.o = -pg

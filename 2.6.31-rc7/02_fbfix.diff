@@ -1,0 +1,26 @@
+commit 0bfa40fa28aefc363628f4aa54eac101e788ad1e
+Author: sk <sk@sx.net.eu.org>
+Date:   Wed Aug 26 03:53:52 2009 +0400
+
+    framebuffer fix
+
+diff --git a/arch/arm/mach-s3c2410/mach-h1940.c b/arch/arm/mach-s3c2410/mach-h1940.c
+index efd10d5..cbdd45a 100644
+--- a/arch/arm/mach-s3c2410/mach-h1940.c
++++ b/arch/arm/mach-s3c2410/mach-h1940.c
+@@ -143,12 +143,12 @@ static struct s3c2410fb_display h1940_lcd __initdata = {
+ 	.type =		S3C2410_LCDCON1_TFT,
+ 	.width =	240,
+ 	.height =	320,
+-	.pixclock =	260000,
++	.pixclock =	180000,
+ 	.xres =		240,
+ 	.yres =		320,
+ 	.bpp =		16,
+-	.left_margin =	20,
+-	.right_margin =	8,
++	.left_margin =	8,
++	.right_margin =	20,
+ 	.hsync_len =	4,
+ 	.upper_margin =	8,
+ 	.lower_margin = 7,
