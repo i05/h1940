@@ -9,17 +9,17 @@ index aef63c8..48b00f9 100644
 --- a/arch/arm/Kconfig
 +++ b/arch/arm/Kconfig
 @@ -872,12 +872,28 @@ source "drivers/pci/Kconfig"
- 
+
  source "drivers/pcmcia/Kconfig"
- 
+
 +
 +
  endmenu
- 
+
  menu "Kernel Features"
- 
+
  source "kernel/time/Kconfig"
- 
+
 +config TXTOFFSET_DELTA
 +	bool "Move kernel text offset"
 +	default n
@@ -33,7 +33,7 @@ index aef63c8..48b00f9 100644
 +	  text segment from the architecture default. This can be
 +	  useful for machines where the bootloader uses the area
 +	  the kernel usually occupies for suspend/resume.
-+	
++
  config SMP
  	bool "Symmetric Multi-Processing (EXPERIMENTAL)"
  	depends on EXPERIMENTAL && (REALVIEW_EB_ARM11MP || REALVIEW_EB_A9MP ||\
@@ -52,7 +52,7 @@ index c877d6d..c0e1423 100644
  #KBUILD_CFLAGS	+=-pipe
 @@ -178,7 +178,12 @@ export CFLAGS_3c589_cs.o
  endif
- 
+
  # The byte offset of the kernel image in RAM from the start of RAM.
 +
 +ifeq ($(CONFIG_TXTOFFSET_DELTA),y)
@@ -60,7 +60,7 @@ index c877d6d..c0e1423 100644
 +else
  TEXT_OFFSET := $(textofs-y)
 +endif
- 
+
  # The first directory contains additional information for the boot setup code
  ifneq ($(machine-y),)
 diff --git a/arch/arm/boot/Makefile b/arch/arm/boot/Makefile
@@ -84,11 +84,11 @@ index da226ab..9a18891 100644
 +
  PARAMS_PHYS := $(params_phys-y)
  INITRD_PHYS := $(initrd_phys-y)
- 
+
 +
 +
  export ZRELADDR INITRD_PHYS PARAMS_PHYS
- 
+
  targets := Image zImage xipImage bootpImage uImage
 diff --git a/arch/arm/boot/compressed/Makefile b/arch/arm/boot/compressed/Makefile
 index ce39dc5..ebf436a 100644
@@ -110,9 +110,9 @@ index ff89d0b..b045252 100644
 @@ -2,7 +2,7 @@
  # Makefile for the linux kernel.
  #
- 
+
 -AFLAGS_head.o := -DTEXT_OFFSET=$(TEXT_OFFSET)
 +AFLAGS_head.o := -DTEXT_OFFSET="$(TEXT_OFFSET)"
- 
+
  ifdef CONFIG_DYNAMIC_FTRACE
  CFLAGS_REMOVE_ftrace.o = -pg

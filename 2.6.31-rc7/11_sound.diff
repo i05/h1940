@@ -16,9 +16,9 @@ index d8a8327..f2367e9 100644
 +	H1940_LATCH_CPUQ5		| \
 +	H1940_LATCH_UDA_POWER /*		| \
 +	H1940_LATCH_AUDIO_POWER */
- 
+
  /* control functions */
- 
+
 diff --git a/arch/arm/plat-s3c24xx/adc.c b/arch/arm/plat-s3c24xx/adc.c
 index 91d1fce..16529bb 100644
 --- a/arch/arm/plat-s3c24xx/adc.c
@@ -26,21 +26,21 @@ index 91d1fce..16529bb 100644
 @@ -11,6 +11,8 @@
   * the Free Software Foundation; either version 2 of the License.
  */
- 
+
 +#define DEBUG
 +
  #include <linux/module.h>
  #include <linux/kernel.h>
  #include <linux/platform_device.h>
 @@ -340,7 +342,7 @@ static irqreturn_t s3c_adc_irq(int irq, void *pw)
- 
+
  	data0 = readl(adc->regs + S3C2410_ADCDAT0);
  	data1 = readl(adc->regs + S3C2410_ADCDAT1);
 -	adc_dbg(adc, "read %d: 0x%04x, 0x%04x\n", client->nr_samples, data0, data1);
 +	//adc_dbg(adc, "read %d: 0x%04x, 0x%04x\n", client->nr_samples, data0, data1);
- 
+
  	client->nr_samples--;
- 
+
 diff --git a/arch/arm/plat-s3c24xx/pwm.c b/arch/arm/plat-s3c24xx/pwm.c
 index 82a6d4d..b1ec6f1 100644
 --- a/arch/arm/plat-s3c24xx/pwm.c
@@ -48,7 +48,7 @@ index 82a6d4d..b1ec6f1 100644
 @@ -11,6 +11,8 @@
   * the Free Software Foundation; either version 2 of the License.
  */
- 
+
 +#define DEBUG
 +
  #include <linux/module.h>
@@ -57,23 +57,23 @@ index 82a6d4d..b1ec6f1 100644
 @@ -263,14 +265,20 @@ int pwm_config(struct pwm_device *pwm, int duty_ns, int period_ns)
  	__raw_writel(tcmp, S3C2410_TCMPB(pwm->pwm_id));
  	__raw_writel(tcnt, S3C2410_TCNTB(pwm->pwm_id));
- 
+
 +	pwm_dbg(pwm, "tcmp=%08x, tcnt=%08x\n", tcmp, tcnt);
 +
  	tcon = __raw_readl(S3C2410_TCON);
  	tcon |= pwm_tcon_manulupdate(pwm);
  	tcon |= pwm_tcon_autoreload(pwm);
  	__raw_writel(tcon, S3C2410_TCON);
- 
+
 +	pwm_dbg(pwm, "tcon[1]=%08x\n", tcon);
 +
  	tcon &= ~pwm_tcon_manulupdate(pwm);
  	__raw_writel(tcon, S3C2410_TCON);
- 
+
 +	pwm_dbg(pwm, "tcon[2]=%08x\n", tcon);
 +
  	local_irq_restore(flags);
- 
+
  	return 0;
 diff --git a/sound/soc/codecs/uda1380.c b/sound/soc/codecs/uda1380.c
 index 5b21594..f7b2292 100644
@@ -82,7 +82,7 @@ index 5b21594..f7b2292 100644
 @@ -16,6 +16,8 @@
   * Copyright 2005 Openedhand Ltd.
   */
- 
+
 +#define DEBUG
 +
  #include <linux/module.h>
@@ -95,7 +95,7 @@ index df494d1..66a31fa 100644
 @@ -29,6 +29,14 @@ config SND_S3C2443_SOC_AC97
  	select AC97_BUS
  	select SND_SOC_AC97_BUS
- 	
+
 +config SND_S3C24XX_SOC_H1940_UDA1380
 +	tristate "SoC I2S Audio for IPAQ h1940"
 +	depends on SND_S3C24XX_SOC && ARCH_H1940
@@ -116,7 +116,7 @@ index 07a93a2..4f6c370 100644
  snd-soc-ln2440sbc-alc650-objs := ln2440sbc_alc650.o
  snd-soc-s3c24xx-uda134x-objs := s3c24xx_uda134x.o
 +snd-soc-h1940-uda1380-objs := h1940_uda1380.o
- 
+
  obj-$(CONFIG_SND_S3C24XX_SOC_JIVE_WM8750) += snd-soc-jive-wm8750.o
  obj-$(CONFIG_SND_S3C24XX_SOC_NEO1973_WM8753) += snd-soc-neo1973-wm8753.o
  obj-$(CONFIG_SND_S3C24XX_SOC_SMDK2443_WM9710) += snd-soc-smdk2443-wm9710.o
@@ -145,7 +145,7 @@ index 0000000..5613857
 +#include "../codecs/uda1380.h"
 +
 +static int h1940_uda_hw_params(struct snd_pcm_substream *substream,
-+	struct snd_pcm_hw_params *params) 
++	struct snd_pcm_hw_params *params)
 +{
 +	struct snd_soc_pcm_runtime *rtd = substream->private_data;
 +	struct snd_soc_dai *codec_dai = rtd->dai->codec_dai;
@@ -156,7 +156,7 @@ index 0000000..5613857
 +	prescale = clkrate / (256*params_rate(params));
 +	if(prescale < 32) prescale++;
 +
-+	printk(KERN_DEBUG "fs: %i, iis_clkrate: %lu, prescale: %lu\n", 
++	printk(KERN_DEBUG "fs: %i, iis_clkrate: %lu, prescale: %lu\n",
 +		params_rate(params), clkrate, prescale);
 +
 +	res = snd_soc_dai_set_fmt(codec_dai, SND_SOC_DAIFMT_I2S |
@@ -262,7 +262,7 @@ index 1d70829..c82752e 100644
 @@ -20,6 +20,8 @@
   *   o Support TDM on PCM and I2S
   */
- 
+
 +#define DEBUG
 +
  #include <linux/module.h>

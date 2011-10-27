@@ -10,7 +10,7 @@ index 56e5253..830b033 100644
 +++ b/arch/arm/plat-s3c24xx/pm.c
 @@ -36,6 +36,7 @@
  #include <linux/io.h>
- 
+
  #include <plat/regs-serial.h>
 +#include <plat/regs-timer.h>
  #include <mach/regs-clock.h>
@@ -40,5 +40,5 @@ index 56e5253..830b033 100644
 +	SAVE_ITEM(S3C2410_TCMPB(4)),
 +	SAVE_ITEM(S3C2410_TCNTO(4)),
  };
- 
+
  static struct sleep_save misc_save[] = {

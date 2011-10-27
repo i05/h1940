@@ -13,11 +13,11 @@ index 645e18d..5b0dc92 100644
  #include <linux/pwm.h>
  #include <linux/pwm_backlight.h>
 +#include <video/platform_lcd.h>
- 
+
  #include <asm/mach/arch.h>
  #include <asm/mach/map.h>
 @@ -41,6 +42,7 @@
- 
+
  #include <mach/h1940.h>
  #include <mach/h1940-latch.h>
 +#include <mach/gpio.h>
@@ -27,7 +27,7 @@ index 645e18d..5b0dc92 100644
 @@ -285,6 +287,23 @@ static struct platform_device s3c_device_bl = {
  	},
  };
- 
+
 +static void h1940_lcd_set_power(struct plat_lcd_data *pdata, unsigned int power) {
 +	gpio_set_value(S3C2410_GPC(5), !!power);
 +}
@@ -54,5 +54,5 @@ index 645e18d..5b0dc92 100644
   	&s3c_device_bl,
 + 	&s3c_device_lcd_power,
  };
- 
+
  static void __init h1940_map_io(void)
