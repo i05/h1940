@@ -13,13 +13,13 @@ index 5b0dc92..371b6b6 100644
  #include <plat/udc.h>
  #include <plat/iic.h>
 +#include <plat/ts.h>
- 
+
  #include <plat/clock.h>
  #include <plat/devs.h>
 @@ -304,6 +305,18 @@ static struct platform_device s3c_device_lcd_power = {
  	}
  };
- 
+
 +static struct s3c_ts_mach_info h1940_ts_info = {
 +	.count_shift = 4,
 +};
@@ -42,7 +42,7 @@ index 5b0dc92..371b6b6 100644
 +	&s3c_device_adc,
 +	&s3c_device_ts,
  };
- 
+
  static void __init h1940_map_io(void)
 diff --git a/arch/arm/plat-s3c/include/plat/adc.h b/arch/arm/plat-s3c/include/plat/adc.h
 index 5f3b1cd..082706b 100644
@@ -55,7 +55,7 @@ index 5f3b1cd..082706b 100644
 +			 void (*touch)(struct s3c_adc_client *client,
 +				       unsigned on),
  			 unsigned int is_ts);
- 
+
  extern void s3c_adc_release(struct s3c_adc_client *client);
 diff --git a/arch/arm/plat-s3c24xx/adc.c b/arch/arm/plat-s3c24xx/adc.c
 index 11117a7..91d1fce 100644
@@ -64,7 +64,7 @@ index 11117a7..91d1fce 100644
 @@ -23,6 +23,8 @@
  #include <plat/regs-adc.h>
  #include <plat/adc.h>
- 
+
 +#include <mach/regs-irq.h>
 +
  /* This driver is designed to control the usage of the ADC block between
@@ -76,7 +76,7 @@ index 11117a7..91d1fce 100644
  			      unsigned *samples_left);
 +	void	(*touch_cb)(struct s3c_adc_client *c, unsigned on);
  };
- 
+
  struct adc_device {
 @@ -58,11 +61,16 @@ struct adc_device {
  	struct clk		*clk;
@@ -84,21 +84,21 @@ index 11117a7..91d1fce 100644
  	struct s3c_adc_client	*ts_pend;
 +	struct s3c_adc_client	*ts;
  	void __iomem		*regs;
- 
+
  	unsigned int		 prescale;
- 
+
  	int			 irq;
 +	int			 irq_tc;
 +
 +	int			 is_waiting_tc;
 +	u32			 dly, tsc;
  };
- 
+
  static struct adc_device *adc_dev;
 @@ -79,9 +87,25 @@ static inline void s3c_adc_convert(struct adc_device *adc)
  	writel(con, adc->regs + S3C2410_ADCCON);
  }
- 
+
 +static inline void s3c_adc_wait_tc(struct adc_device *adc)
 +{
 +	unsigned tsc = readl(adc->regs + S3C2410_ADCTSC);
@@ -119,11 +119,11 @@ index 11117a7..91d1fce 100644
  {
 +	unsigned tsc;
  	unsigned con = readl(adc->regs + S3C2410_ADCCON);
- 
+
  	client->select_cb(client, 1);
 @@ -94,6 +118,15 @@ static inline void s3c_adc_select(struct adc_device *adc,
  		con |= S3C2410_ADCCON_SELMUX(client->channel);
- 
+
  	writel(con, adc->regs + S3C2410_ADCCON);
 +
 +	tsc = readl(adc->regs + S3C2410_ADCTSC);
@@ -135,12 +135,12 @@ index 11117a7..91d1fce 100644
 +
 +	writel(tsc, adc->regs + S3C2410_ADCTSC);
  }
- 
+
  static void s3c_adc_dbgshow(struct adc_device *adc)
 @@ -104,6 +137,24 @@ static void s3c_adc_dbgshow(struct adc_device *adc)
  		readl(adc->regs + S3C2410_ADCDLY));
  }
- 
+
 +static void s3c_adc_check_touch(struct adc_device *adc)
 +{
 +	struct s3c_adc_client *client = adc->ts;
@@ -164,7 +164,7 @@ index 11117a7..91d1fce 100644
  	struct s3c_adc_client *next = adc->ts_pend;
 @@ -116,12 +167,21 @@ static void s3c_adc_try(struct adc_device *adc)
  		adc->ts_pend = NULL;
- 
+
  	if (next) {
 +		if (adc->is_waiting_tc) {
 +			s3c_adc_check_touch(adc);
@@ -183,12 +183,12 @@ index 11117a7..91d1fce 100644
 +
 +	s3c_adc_dbgshow(adc);
  }
- 
+
  int s3c_adc_start(struct s3c_adc_client *client,
 @@ -143,8 +203,10 @@ int s3c_adc_start(struct s3c_adc_client *client,
  	client->channel = channel;
  	client->nr_samples = nr_samples;
- 
+
 -	if (client->is_ts)
 +	if (client->is_ts) {
  		adc->ts_pend = client;
@@ -196,11 +196,11 @@ index 11117a7..91d1fce 100644
 +	}
  	else
  		list_add_tail(&client->pend, &adc_pending);
- 
+
 @@ -195,12 +257,19 @@ static void s3c_adc_default_select(struct s3c_adc_client *client,
  {
  }
- 
+
 +static void s3c_adc_default_touch(struct s3c_adc_client *client,
 +				  unsigned int on)
 +{
@@ -218,12 +218,12 @@ index 11117a7..91d1fce 100644
  {
  	struct s3c_adc_client *client;
 @@ -209,6 +278,8 @@ struct s3c_adc_client *s3c_adc_register(struct platform_device *pdev,
- 
+
  	if (!select)
  		select = s3c_adc_default_select;
 +	if (!touch)
 +		touch = s3c_adc_default_touch;
- 
+
  	if (!pdev)
  		return ERR_PTR(-EINVAL);
 @@ -223,6 +294,7 @@ struct s3c_adc_client *s3c_adc_register(struct platform_device *pdev,
@@ -231,7 +231,7 @@ index 11117a7..91d1fce 100644
  	client->select_cb = select;
  	client->convert_cb = conv;
 +	client->touch_cb = touch;
- 
+
  	return client;
  }
 @@ -233,6 +305,8 @@ void s3c_adc_release(struct s3c_adc_client *client)
@@ -254,7 +254,7 @@ index 11117a7..91d1fce 100644
 @@ -291,6 +364,25 @@ static irqreturn_t s3c_adc_irq(int irq, void *pw)
  	return IRQ_HANDLED;
  }
- 
+
 +static irqreturn_t s3c_adc_irq_tc(int irq, void *pw)
 +{
 +	struct adc_device *adc = pw;
@@ -278,7 +278,7 @@ index 11117a7..91d1fce 100644
  {
  	struct device *dev = &pdev->dev;
 @@ -309,22 +401,35 @@ static int s3c_adc_probe(struct platform_device *pdev)
- 
+
  	adc->irq = platform_get_irq(pdev, 1);
  	if (adc->irq <= 0) {
 -		dev_err(dev, "failed to get adc irq\n");
@@ -286,14 +286,14 @@ index 11117a7..91d1fce 100644
  		ret = -ENOENT;
  		goto err_alloc;
  	}
- 
+
  	ret = request_irq(adc->irq, s3c_adc_irq, 0, dev_name(dev), adc);
  	if (ret < 0) {
 -		dev_err(dev, "failed to attach adc irq\n");
 +		dev_err(dev, "failed to attach IRQ_ADC\n");
  		goto err_alloc;
  	}
- 
+
 +	adc->irq_tc = platform_get_irq(pdev, 0);
 +	if (adc->irq <= 0) {
 +		dev_err(dev, "failed to get IRQ_TC\n");
@@ -314,41 +314,41 @@ index 11117a7..91d1fce 100644
 -		goto err_irq;
 +		goto err_irq_tc;
  	}
- 
+
  	regs = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 @@ -356,7 +461,10 @@ static int s3c_adc_probe(struct platform_device *pdev)
   err_clk:
  	clk_put(adc->clk);
- 
+
 - err_irq:
 + err_irq_tc:
 +	free_irq(adc->irq_tc, adc);
 +
 + err_irq_adc:
  	free_irq(adc->irq, adc);
- 
+
   err_alloc:
 @@ -387,6 +495,9 @@ static int s3c_adc_suspend(struct platform_device *pdev, pm_message_t state)
  	con |= S3C2410_ADCCON_STDBM;
  	writel(con, adc->regs + S3C2410_ADCCON);
- 
+
 +	adc->tsc = readl(adc->regs + S3C2410_ADCTSC);
 +	adc->dly = readl(adc->regs + S3C2410_ADCDLY);
 +
  	clk_disable(adc->clk);
- 
+
  	return 0;
 @@ -395,12 +506,20 @@ static int s3c_adc_suspend(struct platform_device *pdev, pm_message_t state)
  static int s3c_adc_resume(struct platform_device *pdev)
  {
  	struct adc_device *adc = platform_get_drvdata(pdev);
 +	unsigned int intmsk, submsk;
- 
+
  	clk_enable(adc->clk);
- 
+
  	writel(adc->prescale | S3C2410_ADCCON_PRSCEN,
  	       adc->regs + S3C2410_ADCCON);
- 
+
 +	writel(adc->tsc, adc->regs + S3C2410_ADCTSC);
 +	writel(adc->dly, adc->regs + S3C2410_ADCDLY);
 +
@@ -358,7 +358,7 @@ index 11117a7..91d1fce 100644
 +	s3c_adc_dbgshow(adc);
  	return 0;
  }
- 
+
 diff --git a/drivers/input/touchscreen/Kconfig b/drivers/input/touchscreen/Kconfig
 index 72e2712..0c5201b 100644
 --- a/drivers/input/touchscreen/Kconfig
@@ -366,7 +366,7 @@ index 72e2712..0c5201b 100644
 @@ -260,6 +260,12 @@ config TOUCHSCREEN_MIGOR
  	  To compile this driver as a module, choose M here: the
  	  module will be called migor_ts.
- 
+
 +config TOUCHSCREEN_S3C
 +	tristate "S3C SoC touchscreen"
 +	depends on S3C24XX_ADC
@@ -474,11 +474,11 @@ index 0000000..0af5035
 +
 +	dev_info(&pdev->dev, "s3c24xx touchscreen driver\n");
 +
-+	if(ts) 
++	if(ts)
 +		return -EBUSY;
 +
 +	ts = kzalloc(sizeof(struct s3c_ts), GFP_KERNEL);
-+	if(!ts) 
++	if(!ts)
 +		return res;
 +
 +	ts_mach = pdev->dev.platform_data;

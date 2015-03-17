@@ -14,5 +14,5 @@ index d9cd5dd..efd10d5 100644
  	&s3c_device_bluetooth,
 +	&s3c_device_sdi,
  };
- 
+
  static void __init h1940_map_io(void)

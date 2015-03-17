@@ -14,13 +14,13 @@ index 6eb63ba..645e18d 100644
  #include <linux/gpio_keys.h>
 +#include <linux/pwm.h>
 +#include <linux/pwm_backlight.h>
- 
+
  #include <asm/mach/arch.h>
  #include <asm/mach/map.h>
 @@ -268,6 +270,21 @@ static struct platform_device s3c_device_buttons = {
  	}
  };
- 
+
 +static struct platform_pwm_backlight_data h1940_bl_cfg = {
 +	.pwm_id		= 0,
 +	.pwm_period_ns	= 15000,	/* 66 kHz */
@@ -46,5 +46,5 @@ index 6eb63ba..645e18d 100644
 + 	&s3c_device_timer[0],
 + 	&s3c_device_bl,
  };
- 
+
  static void __init h1940_map_io(void)

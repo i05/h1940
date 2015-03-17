@@ -14,13 +14,13 @@ index cbdd45a..6eb63ba 100644
  #include <linux/io.h>
 +#include <linux/input.h>
 +#include <linux/gpio_keys.h>
- 
+
  #include <asm/mach/arch.h>
  #include <asm/mach/map.h>
 @@ -181,6 +183,91 @@ static struct platform_device s3c_device_bluetooth = {
  	.id               = -1,
  };
- 
+
 +static struct gpio_keys_button h1940_buttons[] = {
 +	{
 +		.gpio		= S3C2410_GPF(0),
@@ -115,5 +115,5 @@ index cbdd45a..6eb63ba 100644
  	&s3c_device_sdi,
 +	&s3c_device_buttons,
  };
- 
+
  static void __init h1940_map_io(void)

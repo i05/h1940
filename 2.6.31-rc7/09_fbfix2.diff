@@ -13,7 +13,7 @@ index 4eb378c..a4056f7 100644
  {
  	struct s3c2410fb_mach_info *npd;
 +	struct s3c2410fb_display *ndsp;
- 
+
  	npd = kmalloc(sizeof(*npd), GFP_KERNEL);
  	if (npd) {
  		memcpy(npd, pd, sizeof(*npd));
@@ -36,5 +36,5 @@ index 4eb378c..a4056f7 100644
 +		printk(KERN_ERR "no memory for LCD platform data\n");
 +
  }
- 
+
  /* NAND Controller */

@@ -13,7 +13,7 @@ index 371b6b6..c048ae7 100644
  #include <plat/iic.h>
  #include <plat/ts.h>
 +#include <plat/hwmon.h>
- 
+
  #include <plat/clock.h>
  #include <plat/devs.h>
 @@ -150,7 +151,7 @@ static struct s3c2410fb_display h1940_lcd __initdata = {
@@ -37,7 +37,7 @@ index 371b6b6..c048ae7 100644
 @@ -317,6 +318,49 @@ static struct platform_device s3c_device_ts = {
  	}
  };
- 
+
 +static struct s3c_hwmon_pdata h1940_hwmon_info = {
 +	.in[0] = &(struct s3c_hwmon_chcfg) {
 +		.name 	= "ch00",
@@ -90,17 +90,17 @@ index 371b6b6..c048ae7 100644
  	&s3c_device_ts,
 +	&s3c_device_hwmon,
  };
- 
+
  static void __init h1940_map_io(void)
 @@ -362,6 +407,8 @@ static void __init h1940_init(void)
   	s3c24xx_udc_set_platdata(&h1940_udc_cfg);
  	s3c_i2c0_set_platdata(NULL);
- 
+
 +	s3c_device_hwmon.dev.platform_data = &h1940_hwmon_info;
 +
  	/* Turn off suspend on both USB ports, and switch the
  	 * selectable USB port to USB device mode. */
- 
+
 diff --git a/arch/arm/plat-s3c/include/plat/hwmon.h b/arch/arm/plat-s3c/include/plat/hwmon.h
 new file mode 100644
 index 0000000..1ba88ea
@@ -154,7 +154,7 @@ index a4056f7..7f57cfa 100644
 +++ b/arch/arm/plat-s3c24xx/devs.c
 @@ -360,7 +360,7 @@ struct platform_device s3c_device_adc = {
  /* HWMON */
- 
+
  struct platform_device s3c_device_hwmon = {
 -	.name		= "s3c24xx-hwmon",
 +	.name		= "s3c-hwmon",
@@ -182,7 +182,7 @@ index 2d50166..2e25b7a 100644
 @@ -702,6 +702,23 @@ config SENSORS_SHT15
  	  This driver can also be built as a module.  If so, the module
  	  will be called sht15.
- 
+
 +config SENSORS_S3C
 +	tristate "S3C24XX/S3C64XX Inbuilt ADC"
 +	depends on ARCH_S3C2410 || ARCH_S3C64XX
